@@ -1,0 +1,218 @@
+\documentclass[mathserif]{beamer}
+\usepackage[utf8]{inputenc}
+\usepackage{listings, verbatim}
+\usepackage{graphicx}
+\usepackage{amsmath, amsthm, amssymb, textcomp, alltt, tcolorbox, framed}
+%\renewcommand{\thesection}{}
+%\renewcommand{\thesubsection}{}
+\newcommand{\code}[1]{{\fontfamily{pcr}\selectfont #1}}
+%\usetheme{Madrid}
+\lstset{basicstyle={\fontfamily{pcr}\selectfont}}
+\begin{document}
+
+\title{Évaluation partielle}
+\date{}
+\frame{\titlepage}
+
+\begin{frame}
+\frametitle{Sommaire}
+\tableofcontents
+\end{frame}
+
+\section{Introduction} 
+
+%\subsection{1. Présentation}
+
+\begin{frame}
+\frametitle{Présentation}
+
+On donne~:
+
+\begin{itemize}
+
+\item Le code d'une fonction \code{f}
+
+\item Un argument \code{x} de \code{f}
+
+\end{itemize}
+
+But~: Créer une fonction \code{g} telle que~:
+
+
+\begin{itemize}
+
+\item $\forall$\code{y}, \code{f(x,~y)~=~g(y)}
+
+\item Le calcul de \code{g(y)} est plus rapide que celui
+de \code{f(x,~y)}
+
+\end{itemize}
+
+\end{frame}
+
+%\subsection{2. Applications}
+
+\begin{frame}
+\frametitle{Applications}
+
+De nombreuses applications existent, dont~:
+
+\begin{itemize}
+
+\item Génération de code et compilation d'un langage en disposant
+uniquement d'un interpréteur de celui-ci,
+
+\item Entrainement de réseaux de neurones,
+
+\item Simulation numérique de circuits.
+
+\end{itemize}
+
+\end{frame}
+
+\section{Conception d'un langage simple}
+
+\begin{frame}
+\frametitle{Pourquoi créer un nouveau langage~?}
+
+\begin{itemize}
+\item Disposer d'un langage minimaliste
+\item Disposer d'un interpréteur pour celui-ci
+\end{itemize}
+
+\end{frame}
+
+%\subsection{1. Choix de conception}
+
+\begin{frame}
+\frametitle{Choix de conception}
+
+\begin{itemize}
+
+\item Syntaxe~: proche du Lisp
+
+\item Typage dynamique
+
+\item Portée statique
+
+\item Utilisation d'un combinateur de point fixe pour la récursion
+
+\end{itemize}
+
+\end{frame}
+
+%\subsection{2. L'interpréteur : la boucle évaluer / appeler}
+
+\begin{frame}
+\frametitle{L'interpréteur - la boucle évaluer / appeler}
+
+\begin{itemize}
+\item Basé sur deux fonctions mutuellement récursives : \code{évaluer}
+et \code{appeler}
+
+\item \code{évaluer(expr,~env)} retourne le résultat de l'évaluation de
+\code{expr} dans l'environnement \code{env}
+
+\item \code{appeler(fct,~args)} retourne le résultat de l'appel de \code{fct}\\
+avec les arguments \code{args}
+
+\end{itemize}
+
+\end{frame}
+
+\section{L'évaluateur partiel}
+
+%\subsection{1. Modification de l'interpréteur en évaluateur partiel}
+\begin{frame}
+\frametitle{Modification de l'interpréteur}
+
+On ajoute une valeur spéciale \code{<inconnu>} et on définit~:
+
+\begin{framed}
+{\Large Définition} \\
+On dit qu'une valeur $v$ est \emph{compatible} avec une
+valeur $\tilde{v}$ utilisant des \code{<inconnu>} si pour chaque
+occurence de \code{<inconnu>} dans $\tilde{v}$ il existe une valeur
+de manière à ce que remplacer chaque occurence de \code{<inconnu>}
+dans $\tilde{v}$ par la valeur associée donne $v$.
+\end{framed}
+
+Par exemple, \code{(cons~1~(cons~2~3))} est compatible avec
+\code{(cons~<inconnu>~(cons~2~<inconnu>))}.
+
+\end{frame}
+
+\begin{frame}
+\frametitle{Modification de l'interpréteur}
+
+On modifie ensuite l'interpréteur en une fonction \code{specialize}
+pour que la propriété suivante soit vérifiée~:
+
+\begin{framed}
+{\Large Propriété} \\
+Pour tout appel de \code{specialize(expr,~env)} \emph{lors
+de l'éxécution de l'évaluateur partiel sur un programme donné},
+si on a \code{(v,~code)~=~specialize(expr,~env)} alors tout appel de
+\code{eval(expr,~e)} \emph{qui termine} où \code{e} est un
+environnement compatible avec \code{env}
+(i.e. chaque valeur de \code{e} est compatible
+avec la valeur correspondante de \code{env}) vérifiera :
+\code{eval(expr,~e)} est compatible avec \code{v}, et de plus,
+\code{eval(expr,~e)~=~eval(code, e)}.
+\end{framed}
+
+\end{frame}
+
+\section{Résultats}
+
+\begin{frame}
+\frametitle{Méthode d'expérimentation}
+
+On compare les programmes suivants~:
+\begin{itemize}
+\item Un programme calculant la suite de Fibonacci naïvement
+\item Le metaévaluateur exécutant ce programme
+\item Ce dernier évalué partiellement, avec et sans optimisations
+\end{itemize}
+On compare également deux méthodes d'éxécution différentes~:
+\begin{itemize}
+\item L'évaluateur (écrit en Python) qui éxécute ces programmes,
+\item Les programmes, compilés vers OCaml puis vers du code natif.
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}
+\frametitle{Temps d'éxécution}
+\includegraphics[width=5.5cm,height=4cm]{eval_graph}
+\includegraphics[width=5.5cm,height=4cm]{compiled_graph}
+\end{frame}
+
+\section{Améliorations envisageables}
+
+\begin{frame}[fragile]
+\frametitle{Améliorations envisageables}
+
+\begin{itemize}
+\item Gérer les fonctions comme~:
+\begin{lstlisting}
+(letrec (f n) (if (= n 0) 0 (f (- n 1))))
+\end{lstlisting}
+\item Améliorer la phase d'optimisation ou utiliser un compilateur
+optimisant déjà existant
+\end{itemize}
+\end{frame}
+
+\section{Bibliographie}
+
+\begin{frame}
+\frametitle{Bibliographie}
+\begin{description}
+
+\item[{[1]}] Jones, Neil D.; Gomard, Carsten K.; Sestoft, Peter. Partial Evaluation and Automatic Program Generation. 1993, 425 p.
+\item[{[2]}] Futamura, Yoshihiko, Partial Evaluation of Computation Process — An Approach to a Compiler-Compiler. Higher-Order and Symbolic Computation 1999, n°12, pp. 381-391
+\item[{[3]}] Abelson, Hal; Sussman, Jerry; Sussman, Julie. Structure and Interpretation of Computer Programs. 2e éd. MIT Press, 1996, pp. 362-397.
+
+\end{description}
+\end{frame}
+\end{document}

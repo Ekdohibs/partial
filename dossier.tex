@@ -1,0 +1,395 @@
+\documentclass[a4paper,11pt]{article}
+\usepackage[margin=3cm]{geometry}
+\usepackage[utf8]{inputenc}
+\usepackage{listings, verbatim}
+\usepackage{graphicx}
+\usepackage{amsmath, amsthm, amssymb, textcomp, alltt, tcolorbox, framed}
+\renewcommand{\thesection}{}
+\renewcommand{\thesubsection}{}
+\newcommand{\code}[1]{{\fontfamily{pcr}\selectfont #1}}
+
+\lstset{basicstyle={\fontfamily{pcr}\selectfont}}
+\begin{document}
+
+\title{Évaluation partielle}
+\date{}
+\maketitle
+
+\section{I. Présentation} 
+
+\subsection{1. Définition d'un évaluateur partiel}
+
+Le but d'un évaluateur partiel est d'optimiser un programme dont on
+connaît une partie des arguments. Plus précisément, il s'agit d'une
+fonction \code{specialize} vérifiant~: pour toute fonction \code{f},
+pour toute entrée \code{x}, \code{y} de cette fonction,
+\code{(specialize(f,~x))(y)~=~f(x,~y)}.
+On souhaite naturellement que \code{(specialize(f,~x))(y)}
+s'éxécute plus rapidement que \code{f(x,~y)}, en profitant du fait que
+\code{x} est déjà connu au calcul de \code{specialize(f,~x)}.
+\subsection{2. Applications}
+
+L'évaluation partielle a de nombreuses applications, dont on pourrait
+par exemple citer (c.f. [1] p.xi)~:
+
+\begin{itemize}
+
+\item Génération de code et compilation d'un langage en disposant
+uniquement d'un interpréteur de celui-ci,
+
+\item Entrainement de réseaux de neurones~: un évaluateur partiel permet
+de transformer un programme général en un adapté pour entrainer un
+réseau donné, et qui sera donc plus rapide,
+
+\item Simulation numérique de circuits.
+
+\end{itemize}
+
+Je me suis plus particulièrement intéressé au premier point, pour
+plusieurs raisons~: en plus de son intérêt pratique (un interpréteur
+est bien plus simple à écrire qu'un compilateur), il permet en effet
+de faire des tests de performance de l'évaluateur partiel en comparant
+le résultat au programme qui serait naturellement écrit dans le
+langage cible ou bien compilé à partir du programme initial.
+
+\section{II. Conception d'un langage simple}
+
+\subsection{1. Choix de conception}
+
+Pour pouvoir écrire un évaluateur partiel, il me fallait commencer par
+un interpréteur. J'ai donc créé un langage assez simple, dont la
+syntaxe est assez proche du Lisp (par souci de simplicité
+d'implémentation). Les langages impératifs conduisant à des effets de
+bord, ils ne sont pas souhaitables pour l'écriture d'un évaluateur
+partiel, car les effets de bord conduisent à une complexité accrue, en
+particulier lors des phases d'optimisation. Au contraire, un langage
+purement fonctionnel vérifie des propriétés comme le fait que résultat
+ne dépend pas de l'ordre d'évaluation ou qu'une fonction peut être
+mémoïzée, qui rendent les optimisations plus simples et dont la
+correction est plus simple à montrer.  Un autre choix important est la
+portée des variables~: ayant commencé par utiliser une portée
+dynamique, pour faciliter l'implémentation, je me suis vite aperçu de
+mon erreur (c.f. note 1) \\
+
+\begin{tcolorbox}
+{\Large Note 1 \normalsize(Un problème avec la portée dynamique)}
+
+\begin{lstlisting}[frame=single]
+(let m 1)
+(let (f x)
+     (+ x m))
+(let (g m)
+     (f m))
+\end{lstlisting}
+
+Ce code possède un problème majeur~:
+Dans le calcul de \code{(g 2)}, on appelle \code{(f 2)}.
+Ce calcul cherche la valeur de \code{m}; or
+celle-ci était 1 lors de la définition de
+\code{f}, mais quand on appelle, \code{(g 2)}, la valeur de \code{m}
+est 2 dans l'environnement de \code{g}, puis dans celui
+de \code{f} \emph{à cause de la portée dynamique}. On obtient
+donc le résultat 4 au lieu de 3 attendu : en particulier,
+le résultat de \code{(f 2)} \emph{dépend de l'environnement} dans
+lequel cet expression est calculée.
+\end{tcolorbox}
+
+Après avoir choisi d'utiliser une portée statique, un autre problème
+se présentait~: celui des fonctions récursives. En effet, avec la
+portée dynamique, une fonction est dans son propre environnement au
+moment de son appel; mais avec la portée statique, comme
+l'environnement d'une fonction est réduit à celui qui existait au
+moment de sa définition plus ses arguments, elle n'est pas dans son
+propre environnement~! J'avais alors deux possibilités à ma
+disposition~: la première était d'utiliser un combinateur de point
+fixe, la deuxième étant d'utiliser un environnement circulaire. J'ai
+choisi la première possibilité, bien que pour des raisons de confort
+(aussi bien au niveau de l'écriture d'un programme que de l'écriture
+de l'interpréteur), ce combinateur de point fixe soit implémenté dans
+l'interpréteur lui-même (c.f. note 2). En effet, un environnement
+circulaire possède le problème qu'il nécessite de créer une structure
+de données circulaire (ce qui n'est par exemple pas possible dans le
+langage lui-même), qui peut ensuite poser des problèmes (lors d'un
+test d'égalité structurelle par exemple). \\
+
+\begin{tcolorbox}
+{\Large Note 2 \normalsize (Le combinateur de point fixe et son utilisation)} \\
+  Un combinateur de point fixe \code{Y} vérifie : pour tout \code{f},
+  \code{Y~f~=~f~(Y~f)}.  Il permet de faire des récursions en
+  transformant une expression du type~:
+\begin{lstlisting}
+(letrec (f x) <definition de f>)
+\end{lstlisting}
+en:
+\begin{lstlisting}
+(let (f_rec f x) <definition de f>)
+(let f (Y f_rec))
+\end{lstlisting}
+Le combinateur de point fixe est implémenté ici directement dans
+l'interpréteur, ainsi \code{(Y f\_rec)} retourne une valeur de type
+point fixe, qui ne sera développé que lorsque l'on essaiera de
+l'appliquer à des arguments.  Une version légèrement généralisée du
+combinateur de point fixe, qui prend plusieurs arguments est utilisée
+pour les fonctions mutuellement récursives.
+\end{tcolorbox}
+
+\subsection{2. L'interpréteur : la boucle évaluer / appeler}
+
+L'interpréteur se base sur deux fonctions mutuellement récursives,
+"évaluer" et "appeler". "évaluer" prend en entrée une expression et un
+environnement, tandis que "appeler" prend en entrée une fonction et
+ses arguments, et calcule le résultat de l'application de cette
+fonction à ces arguments (elle prend donc des valeurs et non des
+expressions en entrée).
+
+\begin{comment}
+Le code présenté ici est légèrement simplifié,
+afin de montrer clairement sa structure de base.
+
+\begin{lstlisting}
+evaluer(expression, environnement)
+  Si expression est une constante:
+    retourner expression
+  Si expression est une variable:
+    retourner trouver_variable(environnement, expression)
+  Si expression est une instruction conditionnelle:
+    resultat_test = evaluer(test(expression), environnement)
+    Si resultat_test:
+      retourner evaluer(si_vrai(expression), environnement)
+    Sinon:
+      retourner evaluer(si_faux(expression), environnement)
+  Si expression est un appel:
+    fct = evaluer(fonction(expression), environnement)
+    arguments = [evaluer(arg, environnement)
+        pour arg dans arguments(expression)]
+    appeler(fct, arguments)
+
+appeler(fonction, arguments)
+  Si fonction est une fonction de base:
+    appeler_fonction_de_base(fonction, arguments)
+  Sinon:
+    env = environnement_fonction(fonction)
+    nouveau_env = ajout_environnement(env,
+        noms_arguments(fonction), arguments)
+    retourner evaluer(code(fonction), nouveau_env)
+\end{lstlisting}
+\end{comment}
+
+\section{III. L'évaluateur partiel}
+
+\subsection{1. Modification de l'interpréteur en évaluateur partiel}
+
+On remarque que un interpréteur et un évaluateur partiel sont en fait
+très proches : on va donc modifier l'interpréteur. La première
+modification est le type des valeurs : on ajoute un type spécial
+\code{<inconnu>} qui signifie qu'on peut remplacer cette valeur par n'importe
+quelle autre.
+
+\begin{framed}
+{\noindent \Large Définition 1} \\
+\indent On dit qu'une valeur $v$ est \emph{compatible} avec une
+valeur $\tilde{v}$ utilisant des \code{<inconnu>} si pour chaque
+occurence de \code{<inconnu>} dans $\tilde{v}$ il existe une valeur
+de manière à ce que remplacer chaque occurence de \code{<inconnu>}
+dans $\tilde{v}$ par la valeur associée donne $v$.
+
+Par exemple, \code{(cons~1~2)} est compatible avec \code{(cons~1~<inconnu>)}.
+\end{framed}
+
+Uniquement modifier l'interpréteur pour qu'il accepte et retourne des
+valeurs de ce type étendu n'est cependant pas suffisant: on obtient
+bien une valeur du type étendu qui correspond à la valeur de retour de
+l'expression, mais on ne sait pas comment obtenir ce résultat~! On
+modifie donc également la valeur de retour de l'interpréteur pour
+qu'il retourne également une expression calculant la valeur, et tenant
+compte des restrictions imposées aux arguments.
+
+\begin{comment}
+On obtient donc le pseudo-code suivant, très proche de celui de
+l'interpréteur (il est ici écourté) :
+
+\begin{lstlisting}
+specialiser(expression, environnement)
+  Si expression est une constante:
+    retourner (expression, expression)
+  Si expression est une variable:
+    retourner (trouver_variable(environnement, expression),
+                   expression)
+  Si expression est une instruction conditionnelle:
+    (resultat_test, code_test) =
+        specialiser(test(expression), environnement)
+    Si resultat_test est connu:
+        Si resultat_test:
+          retourner specialiser(si_vrai(expression),
+                                environnement)
+        Sinon:
+          retourner specialiser(si_faux(expression),
+                                environnement)
+    Sinon:
+       (valeur1, code1) =
+           specialiser(si_vrai(expression), environnement)
+       (valeur2, code2) =
+           specialiser(si_faux(expression), environnement)
+       retourner (fusion_valeurs(valeur1, valeur2),
+                    creer_test(code_test, code1, code2))
+  etc.
+\end{lstlisting}
+\end{comment}
+
+Une fois le calcul de l'évaluateur partiel terminé, on effectue une
+phase d'optimisation~: en effet, on se retrouve avec beaucoup plus de
+fonctions que l'on en avait au départ, mais de nombreuses fonctions
+sont triviales et se réduisent à l'appel d'une autre fonction, ou
+n'utilisent pas certains de leurs arguments. On simplifie donc cela,
+puis on recrée le code permettant de calculer le résultat en mettant
+bout-à-bout les définitions des différentes fonctions (après calcul
+des composantes fortement connexes du graphe d'appel des fonctions
+pour savoir quelles définitions récursives sont nécessaires).
+
+\subsection{2. Vérification de la validité}
+
+On suppose ici que le calcul de l'évaluateur partiel termine (en
+pratique, on ajoute des limites au nombre de fois où une fonction peut
+être spécialisée pour assurer cela). On peut alors montrer le résultat
+suivant~:
+
+\begin{framed}
+{\noindent \Large Théorème 1} \\
+\indent Pour tout appel de \code{specialize(expr,~env)} \emph{lors
+de l'éxécution de l'évaluateur partiel sur un programme donné},
+si on a \code{(v,~code)~=~specialize(expr,~env)} alors tout appel de
+\code{eval(expr,~e)} \emph{qui termine} où \code{e} est un
+environnement compatible avec \code{env}
+(i.e. chaque valeur de \code{e} est compatible
+avec la valeur correspondante de \code{env}) vérifiera :
+\code{eval(expr,~e)} est compatible avec \code{v}, et de plus,
+\code{eval(expr,~e)~=~eval(code, e)}.
+\end{framed}
+En particulier, il se peut qu'un programme qui ne termine pas soit
+transformé en programme qui termine (c.f. note 3). On ne montre \emph{pas}
+ce résultat
+par induction structurelle (car l'appel d'une fonction ne
+correspond pas à un cas d'induction structurelle) mais par récurrence
+par ordre croissant de fin d'appel (c'est pour cela que l'on a supposé
+que le calcul se terminait).
+
+%Voir encadré pour la preuve d'un des cas.
+
+\begin{tcolorbox}
+{\Large Note 3 \normalsize (Programme dont la terminaison n'est pas respectée)}
+\begin{lstlisting}[frame=single]
+(letrec (f x) (f x))
+(let (g x) (tail (cons (f x) 0)))
+\end{lstlisting}
+Le calcul de \code{(g 1)} ne termine pas, mais après évaluation partielle,
+on obtient :
+\begin{lstlisting}[frame=single]
+(let (g x) 0)
+\end{lstlisting}
+qui termine. On aurait cependant obtenu le même résultat si le
+programme initial terminait, par exemple si il était évalué
+paresseusement.
+\end{tcolorbox}
+
+\begin{comment}
+\begin{tcolorbox}
+{\large Preuve 1: Correction dans le cas d'un \code{if}} \\
+\Huge TODO (?)
+\end{tcolorbox}
+\end{comment}
+
+\section{IV. Résultats}
+
+Pour tester l'efficacité de l'évaluateur partiel, j'ai écrit un
+meta-évaluateur du langage, et je l'ai évalué partiellement en lui
+fixant un programme. J'ai utilisé la fonction naïve calculant la suite
+de Fibonacci comme programme afin d'obtenir de nombreux appels de
+fonctions pour des entrées assez petites: en effet, pour avoir des
+temps mesurables, il fallait que les temps d'éxécution soient très
+grands. Ceux-ci restent cependant exponentiels après évaluation
+partielle~: celle-ci ne remplace pas un mauvais algorithme.
+
+J'ai également comparé quatre versions différentes :
+
+\begin{itemize}
+
+\item Le metaévaluateur calculant la suite de Fibonacci [Metaeval]
+\item Le même programme évalué partiellement [Partiel]
+\item Le même programme évalué partiellement, mais sans la phase
+d'optimisations [Partiel non opt]
+\item La programme calculant la suite de Fibonacci qui était donné comme
+entrée au metaévaluateur. [Simple]
+
+\end{itemize}
+
+De plus, j'ai comparé deux méthodes d'exécution :
+
+\begin{itemize}
+\item L'évaluateur initial,
+\item Les programmes, compilés en OCaml puis vers du code natif.
+\end{itemize}
+
+\newpage
+\noindent Résultats : \\ \\
+Interprété~: \\
+\includegraphics[width=13cm]{eval_graph} \\
+Compilé~: \\
+\includegraphics[width=13cm]{compiled_graph}
+ \\
+
+Pour le calcul de \code{(fib 20)} : \\
+
+\begin{tabular}{ | l | c | c | c | c | } \hline
+       	& Metaeval & Partiel & Partiel non opt & Simple \\ \hline
+Évalué 	& 211.2 s  & 1.206 s & 39.03 s         & 0.813 s \\ \hline
+Compilé & 0.304 s  & 0.005 s & 0.015 s         & 0.003 s \\ \hline
+
+\end{tabular}
+\\
+
+On remarque en particulier que le temps d'exécution du programme
+partiellement évalué est proche de celui du programme donné en
+argument au metaévaluateur, ce qui était bien le résultat
+souhaité. On voit également que la phase d'optimisation, réduit de
+manière importante le temps d'éxécution. Sans celle-ci, le programme
+partiellement évalué reste assez lent mais est quand même bien plus
+rapide que le metaévaluateur.  C'est aussi en supprimant cette phase
+d'optimisation qu'on trouve la seule différence significative de temps
+d'éxécution entre la version compilée et interprétée (le compilateur
+de OCaml faisant quelques optimisations).
+
+\section{V. Améliorations envisageables}
+
+Pour le cœur de l'évaluateur partiel, on pourrait envisager quelques
+améliorations par exemple lors de la spécialisation de fonctions
+récursives : en effet une fonction du type :
+
+\begin{lstlisting}
+(letrec (f n) (if (= n 0) 0 (f (- n 1))))
+\end{lstlisting}
+
+qui retourne toujours 0 quand elle termine n'est pas détectée en tant
+que telle.
+
+Une autre amélioration, cette fois-ci lors de l'optimisation
+pourrait être de simplifier les fonctions qui retournent une structure
+partiellement connue à l'évaluation (du type \code{(cons~0~<inconnu>)}). La
+valeur de retour de telles fonctions n'est en effet pas modifiée lors
+de l'optimisation. Une autre manière d'aborder ce problème serait de
+compiler le langage vers un langage fonctionnel doté d'un bon compilateur
+optimisant (possiblement Haskell), et de laisser ce compilateur faire
+toute la phase d'optimisation une fois la phase d'évaluation partielle faite
+(qui resterait utile même si le langage était compilé, le compilateur
+n'effectuant pas d'évaluation partielle).
+
+\section{VI. Bibliographie}
+
+\begin{description}
+
+\item[{[1]}] Jones, Neil D.; Gomard, Carsten K.; Sestoft, Peter. Partial Evaluation and Automatic Program Generation. 1993, 425 p.
+\item[{[2]}] Futamura, Yoshihiko, Partial Evaluation of Computation Process — An Approach to a Compiler-Compiler. Higher-Order and Symbolic Computation 1999, n°12, pp. 381-391
+\item[{[3]}] Abelson, Hal; Sussman, Jerry; Sussman, Julie. Structure and Interpretation of Computer Programs. 2e éd. MIT Press, 1996, pp. 362-397.
+
+\end{description}
+
+\end{document}

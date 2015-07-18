@@ -1,0 +1,46 @@
+[b]Titre :[/b]
+Évaluation partielle
+
+[b]Motivation :[/b]
+Obtenir des programmes s'exécutant rapidement est un des objectifs principaux des compilateurs. Utilisant beaucoup Python, qui est interprété, je me suis demandé si la vitesse d'exécution réduite pouvait être évitée sans avoir à écrire un compilateur, ce qui m'a fait découvrir l'évaluation partielle. Celle-ci permet en effet d'optimiser un programme dont on connaît une partie des entrées.
+
+[b]Objectif :[/b]
+Étudier comment et à quelle point l'évaluation partielle permet d'optimiser un programme.
+
+[b]Démarches :[/b]
+Mon travail s'est effectué de la façon suivante :
+- Recherches préliminaires sur l'évaluation partielle
+- Conception d'un langage simple pour l'évaluation partielle et écriture d'un interpréteur pour celui-ci
+- Modification de l'interpréteur en évaluateur partiel, et écriture d'un metaévaluateur pour le tester
+- Vérification de la validité de l'évaluateur partiel
+
+[b]Travail expérimental :[/b]
+Réalisation d'un évaluateur partiel pour un langage simple, et expériences pour déterminer son efficacité.
+
+[b]Plan :[/b]
+Introduction
+
+I. Présentation
+- Définition d'un évaluateur partiel
+- Applications
+
+II. L'expérience : écriture d'un évaluateur partiel
+1. Création du langage et de l'interpréteur
+- Choix lors de la conception du langage et raisons
+- L'interpréteur : la boucle évaluer / appeler
+
+2. L'évaluateur partiel
+- Modification de l'interpréteur en évaluateur partiel
+- Vérification de la validité de celui-ci
+
+III. Résultats et prolongements
+
+Conclusion
+
+[b]Bilan :[/b]
+Ce TIPE m'a permis de comprendre non seulement les problèmes qui se posent avec les évaluateurs partiels, mais aussi ceux de la conception d'un langage, ainsi que dans d'autres domaines liés à la compilation. J'ai pu également me rendre compte de la grande efficacité d'un évaluateur partiel simple dans certains cas, et ses faiblesses dans d'autres cas, qui montrent que des améliorations sont possibles.
+
+[b]Bibliographie :[/b]
+- Futamura, Yoshihiko, «Partial Evaluation of Computation Process — An Approach to a Compiler-Compiler». Higher-Order and Symbolic Computation 1999, n°12, pp. 381-391
+- Jones, Neil D.; Gomard, Carsten K.; Sestoft, Peter. Partial Evaluation and Automatic Program Generation. 1993, 425 p.
+- Abelson, Hal; Sussman, Jerry; Sussman, Julie. Structure and Interpretation of Computer Programs. 2e éd. MIT Press, 1996, pp. 362-397.

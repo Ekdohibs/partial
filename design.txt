@@ -1,0 +1,9 @@
+- Purely functional
+- Dynamically typed
+- Basic types:
+-> int
+-> string = char list
+-> char
+-> list
+-> function
+- Prefix operators (Lisp-like)
